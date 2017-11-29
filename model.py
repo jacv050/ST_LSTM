@@ -119,8 +119,8 @@ class ST_LSTMCellv2(nn.Module):
         #self.weight_hh_t.data.set_(weight_hh_data)
         #self.weight_hh_s.data.set_(weight_hh_data)
         # The bias is just set to zero vectors.
-        if self.use_bias:
-            self.bias.data.fill_(0)
+        #if self.use_bias:
+        #    self.bias.data.fill_(0)
 
     def forward(self, x, h_t_1, h_s_1):
         """

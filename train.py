@@ -24,11 +24,11 @@ def main(args):
         os.makedirs(args.model_path)
 
     data_loader = get_loader(args.data_dir, args.seq_len, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers) 
+                             shuffle=True, num_workers=args.num_workers, ds = args.ds) 
 
     # Build eval data loader
     eval_data_loader = get_loader(args.data_dir_test, args.seq_len, args.batch_size,
-                             shuffle=True, num_workers=args.num_workers) 
+                             shuffle=False, num_workers=args.num_workers, ds = args.ds, is_val = True) 
     
     model = SkeletonAction(args.input_size, args.hidden_size, args.num_class, args.num_layers, args.use_bias, args.dropout)
 
@@ -77,7 +77,9 @@ def main(args):
                     for k in range(pred_lbl.size(2)):
                          cnt[i][pred_lbl[i,j,k]] += 1
             cnt = cnt.max(dim = -1)[1]
-                    
+                   
+            l_total = data.size(0)
+            l_correct = (cnt.squeeze() == gt_lbl.squeeze()).sum() 
             total_train += data.size(0)
             total_correct += (cnt.squeeze() == gt_lbl.squeeze()).sum()
 
@@ -92,6 +94,11 @@ def main(args):
             #loss = criterion(opt, lbl)
             loss.backward()
             optimizer.step()
+            if i_step % args.log_step == 0:
+                logging.info('Epoch [%d/%d] [%d/%d], Loss: %.4f, accuracy: %5.4f',
+                          epoch, args.num_epochs, 
+                          i_step, len(data_loader),
+                            loss.data[0], l_correct * 1.0 / l_total)
 
         accuracy = total_correct* 1.0 / total_train
         if epoch % 10 == 0:
@@ -140,7 +147,10 @@ def main(args):
                 opt = opt.view(opt.size(0) * opt.size(1) * opt.size(2), opt.size(3))
                 #loss = criterion(opt, lbl)
                 log_p = F.log_softmax(opt)
+                mask = mask.view(opt.size(0), 1)
                 loss = - (mask.squeeze() * log_p[torch.LongTensor(range(opt.size(0))).cuda(), lbl.squeeze().data]).sum() / mask.sum()
+                if k_step >= 10:
+                    break
             accuracy = correct_num * 1.0 / total_num
             logging.info('Validating [%d], Loss: %.4f, accuracy: %.4f'
                         ,epoch, loss.data[0], accuracy)
@@ -156,6 +166,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir_test', type = str, default = './data/utkinect/joints_processed_shrink_rm_center_test/')
     parser.add_argument('--input_size', type=int , default=3,
                         help='dimension of input skeleton size(default 3d)')
+    parser.add_argument('--ds', type = str, default = 'UTKinect')
     parser.add_argument('--seq_len', type=int , default=10, help = 'default length of the sequence for training.')
     parser.add_argument('--hidden_size', type=int , default=128,
                         help='dimension of lstm hidden states')
