@@ -54,6 +54,7 @@ def main(args):
     for epoch in range(args.num_epochs):
         total_train = 0
         total_correct = 0
+        total_correct_2 = 0
         for i_step, (lbl, data, length) in enumerate(data_loader):
             # Set mini-batch dataset
             lbl = Variable(lbl)
@@ -87,7 +88,21 @@ def main(args):
             lbl = lbl.repeat(1, opt.size(1), opt.size(2)).contiguous()
             lbl = lbl.view(lbl.size(0) * lbl.size(1) * lbl.size(2))
             opt = opt.contiguous()
+
+            prob = F.softmax(opt.view(opt.size(0) * opt.size(1) * opt.size(2), opt.size(3)))
+            prob = prob.view(opt.size(0), opt.size(1), opt.size(2), opt.size(3))
+            prob = prob.sum(dim = 2)
+            prob_sum = torch.zeros(prob.size(0), prob.size(2))
+            for i in range(prob.size(0)):
+                for k in range(prob_sum.size(1)):
+                    for j in range(length[i][0]):
+                        prob_sum[i,k] += prob.data[i,j,k]
+            pred_lbl = prob_sum.max(dim = -1)[1].cpu()
+            l_correct_2 = (pred_lbl.squeeze() == gt_lbl.squeeze()).sum()
+            total_correct_2 += l_correct_2
+
             opt = opt.view(opt.size(0) * opt.size(1) * opt.size(2), opt.size(3))
+            # Now, we compute the accuracy 2.
             log_p = F.log_softmax(opt)
             mask = mask.view(mask.size(0) * mask.size(1) * mask.size(2))
             loss = - (mask.squeeze() * log_p[torch.LongTensor(range(opt.size(0))).cuda(), lbl.squeeze().data]).sum() / mask.sum()
@@ -95,16 +110,22 @@ def main(args):
             loss.backward()
             optimizer.step()
             if i_step % args.log_step == 0:
-                logging.info('Epoch [%d/%d] [%d/%d], Loss: %.4f, accuracy: %5.4f',
+                logging.info('Epoch [%d/%d] [%d/%d], Loss: %.4f, ac: %5.4f, ac2: %5.4f',
                           epoch, args.num_epochs, 
                           i_step, len(data_loader),
-                            loss.data[0], l_correct * 1.0 / l_total)
+                            loss.data[0], l_correct * 1.0 / l_total, l_correct_2 * 1.0 / l_total)
 
         accuracy = total_correct* 1.0 / total_train
-        if epoch % 10 == 0:
-            logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f',
+        accuracy2 = total_correct_2 * 1.0 / total_train
+
+        logging.info('Epoch [%d/%d], Loss: %.4f, ac: %5.4f, ac2: %5.4f',
                           epoch, args.num_epochs, 
-                            loss.data[0], accuracy)
+                            loss.data[0], accuracy, accuracy2)
+
+        if epoch % 10 == 0:
+            logging.info('Epoch [%d/%d], Loss: %.4f, ac: %5.4f, ac2: %5.4f',
+                          epoch, args.num_epochs, 
+                            loss.data[0], accuracy, accuracy2)
             torch.save(model.state_dict(), 
                 os.path.join(args.model_path, 
                 'model-%d.pkl' %(epoch+1)))
@@ -112,6 +133,7 @@ def main(args):
             model.eval()
             total_num = 0
             correct_num = 0
+            total_correct_2 = 0
             for k_step, (lbl, data, length) in enumerate(eval_data_loader):
                 lbl = Variable(lbl)
                 data = Variable(data)
@@ -144,6 +166,18 @@ def main(args):
                 lbl = lbl.repeat(1, opt.size(1), opt.size(2)).contiguous()
                 lbl = lbl.view(lbl.size(0) * lbl.size(1) * lbl.size(2))
                 opt = opt.contiguous()
+                prob = F.softmax(opt.view(opt.size(0) * opt.size(1) * opt.size(2), opt.size(3)))
+                prob = prob.view(opt.size(0), opt.size(1), opt.size(2), opt.size(3))
+                prob = prob.sum(dim = 2)
+                prob_sum = torch.zeros(prob.size(0), prob.size(2))
+                for i in range(prob.size(0)):
+                    for k in range(prob_sum.size(1)):
+                        for j in range(length[i][0]):
+                            prob_sum[i,k] += prob.data[i,j,k]
+                pred_lbl = prob_sum.max(dim = -1)[1].cpu()
+                l_correct_2 = (pred_lbl.squeeze() == gt_lbl.squeeze()).sum()
+                total_correct_2 += l_correct_2
+                
                 opt = opt.view(opt.size(0) * opt.size(1) * opt.size(2), opt.size(3))
                 #loss = criterion(opt, lbl)
                 log_p = F.log_softmax(opt)
@@ -152,8 +186,9 @@ def main(args):
                 if k_step >= 10:
                     break
             accuracy = correct_num * 1.0 / total_num
-            logging.info('Validating [%d], Loss: %.4f, accuracy: %.4f'
-                        ,epoch, loss.data[0], accuracy)
+            accuracy2 = total_correct_2 * 1.0 / total_num
+            logging.info('Validating [%d], Loss: %.4f, accuracy: %.4f, accuracy2:%.4f'
+                        ,epoch, loss.data[0], accuracy, accuracy2)
  
             model.train()
 
