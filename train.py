@@ -1,6 +1,6 @@
 import argparse
 import torch
-import cPickle as pickle
+import pickle
 import torch.nn as nn
 import numpy as np
 import os
@@ -28,7 +28,7 @@ def main(args):
 
     # Build eval data loader
     eval_data_loader = get_loader(args.data_dir_test, args.seq_len, args.batch_size,
-                             shuffle=False, num_workers=args.num_workers, ds = args.ds, is_val = True) 
+                             shuffle=True, num_workers=args.num_workers, ds = args.ds, is_val = False) 
     
     model = SkeletonAction(args.input_size, args.hidden_size, args.num_class, args.num_layers, args.use_bias, args.dropout)
 

@@ -56,6 +56,7 @@ class UTKinect(data.Dataset):
 
         if data.shape[0] < self.seq_len:
             # No need to sample
+            length[0] = data.shape[0]
             ndata = np.zeros((self.seq_len, data.shape[1], data.shape[2]))
             ndata[0:data.shape[0],:,:] = data
             data = torch.from_numpy(ndata)
@@ -118,6 +119,7 @@ class NTUDataset(data.Dataset):
 
         if data.shape[0] < self.seq_len:
             # No need to sample
+            length[0] = data.shape[0]
             ndata = np.zeros((self.seq_len, data.shape[1]))
             ndata[0:data.shape[0],:] = data
             data = torch.from_numpy(ndata)
