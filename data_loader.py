@@ -1,3 +1,5 @@
+
+from __future__ import division
 import torch
 import torch.utils.data as data
 import os
@@ -34,7 +36,7 @@ class UTKinect(data.Dataset):
                 else:
                     idata = np.loadtxt(ffn)
                     idata = np.stack(idata,0)
-                    idata = np.reshape(idata, (idata.shape[0], idata.shape[1]/3, 3))
+                    idata = np.reshape(idata, (idata.shape[0], idata.shape[1]//3, 3))
                     if idata.shape[1] == 20:
                         idata = idata[:,self.travel_idx_20,:]
                     elif idata.shape[1] == 15:
@@ -69,7 +71,7 @@ class UTKinect(data.Dataset):
             ndata = data[idx, :]
             data = torch.from_numpy(ndata)
         else:
-            start_idx = range(0, data.shape[0], data.shape[0] / self.seq_len)
+            start_idx = range(0, data.shape[0], data.shape[0] // self.seq_len)
             if len(start_idx) > self.seq_len:
                 start_idx = start_idx[0:self.seq_len] # the last one has more data.
             start_idx.append(data.shape[0])
@@ -132,7 +134,7 @@ class NTUDataset(data.Dataset):
             ndata = data[idx, :,:]
             data = torch.from_numpy(ndata)
         else:
-            start_idx = range(0, data.shape[0], data.shape[0] / self.seq_len)
+            start_idx = list(range(0, data.shape[0], data.shape[0] // self.seq_len))
             if len(start_idx) > self.seq_len:
                 start_idx = start_idx[0:self.seq_len] # the last one has more data.
             start_idx.append(data.shape[0])
@@ -172,7 +174,7 @@ class NTU(data.Dataset):
                 else:
                     idata = np.loadtxt(ffn)
                     idata = np.stack(idata,0)
-                    idata = np.reshape(idata, (idata.shape[0], idata.shape[1]/3, 3))
+                    idata = np.reshape(idata, (idata.shape[0], idata.shape[1]//3, 3))
                     if idata.shape[1] == 20:
                         idata = idata[:,self.travel_idx_20,:]
                     elif idata.shape[1] == 15:
@@ -206,7 +208,7 @@ class NTU(data.Dataset):
             ndata = data[idx, :]
             data = torch.from_numpy(ndata)
         else:
-            start_idx = range(0, data.shape[0], data.shape[0] / self.seq_len)
+            start_idx = range(0, data.shape[0], data.shape[0] // self.seq_len)
             if len(start_idx) > self.seq_len:
                 start_idx = start_idx[0:self.seq_len] # the last one has more data.
             start_idx.append(data.shape[0])

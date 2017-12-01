@@ -1,3 +1,5 @@
+from __future__ import division
+
 import argparse
 import torch
 import pickle
@@ -122,7 +124,7 @@ def main(args):
                           epoch, args.num_epochs, 
                             loss.data[0], accuracy, accuracy2)
 
-        if epoch % 10 == 0:
+        if epoch % 1 == 0:
             logging.info('Epoch [%d/%d], Loss: %.4f, ac: %5.4f, ac2: %5.4f',
                           epoch, args.num_epochs, 
                             loss.data[0], accuracy, accuracy2)
