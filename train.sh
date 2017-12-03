@@ -12,6 +12,6 @@ python train.py --model_path ./models_ntu_h128_sample_val \
     --log_step 100 \
     --eval_step 200 \
     --save_step 1000 \
-    --batch_size 56 \
+    --batch_size 256 \
     --num_epochs 200 \
-    --num_workers 4
+    --num_workers 8
