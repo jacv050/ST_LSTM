@@ -61,7 +61,7 @@ class UTKinect(data.Dataset):
             ndata = data[idx, :]
             data = torch.from_numpy(ndata)
         else:
-            start_idx = range(0, data.shape[0], data.shape[0] / self.seq_len)
+            start_idx = list(range(0, data.shape[0], data.shape[0] // self.seq_len))
             if len(start_idx) > self.seq_len:
                 start_idx = start_idx[0:self.seq_len] # the last one has more data.
             start_idx.append(data.shape[0])
@@ -119,7 +119,7 @@ class NTUDataset(data.Dataset):
             ndata = data[idx, :]
             data = torch.from_numpy(ndata)
         else:
-            start_idx = range(0, data.shape[0], data.shape[0] / self.seq_len)
+            start_idx = list(range(0, data.shape[0], data.shape[0] // self.seq_len))
             if len(start_idx) > self.seq_len:
                 start_idx = start_idx[0:self.seq_len] # the last one has more data.
             start_idx.append(data.shape[0])
@@ -146,7 +146,7 @@ def get_loader(root, seq_len, batch_size, shuffle, num_workers, ds = 'UTKinect',
     if ds == 'UTKinect':
         ds_class = UTKinect(root,seq_len, lbl2id, is_val)
     elif ds == 'NTU':
-        ds_class = NTUDataset(root,seq_len, lbl2id, is_val)
+        ds_class = NTUDataset(root,seq_len, is_val)
 
     data_loader = torch.utils.data.DataLoader(dataset=ds_class, 
                                               batch_size=batch_size,
