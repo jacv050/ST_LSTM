@@ -52,21 +52,30 @@ class SkeletonAction_VA(nn.Module):
         angles = angles.view((batch_size, seq_len, angles.size(-1)))
          
         # compute the rotation matrix.
-        zero = torch.zeros(batch_size, seq_len, angles.size(-1))
-        one = torch.ones(batch_size, seq_len, angles.size(-1))
+        zero = torch.zeros(batch_size, seq_len)
+        one = torch.ones(batch_size, seq_len)
         if torch.cuda.is_available():
             zero = zero.cuda()
             one = one.cuda()
         zero = Variable(zero) 
         one = Variable(one)
         R = []
-        R.append(torch.stack([ torch.cos(angles), torch.sin(angles), zero], dim = 3))
-        R.append(torch.stack([ -torch.sin(angles), torch.cos(angles), zero], dim = 3))
-        R.append(torch.stack([ zero, zero, one], dim = 3))
-        R = torch.stack(R, dim = 3)
-        R_ = torch.prod(R, dim = 2) # b x seq x 3 x 3
-        R_ = R_.transpose(2,3)
-        R_ = R_.unsqueeze(2) # b x seq x 1 x 3 x 3
+        R_x, R_y, R_z = [], [], []
+        R_x.append(torch.stack([ one, zero, zero], dim = 2))
+        R_x.append(torch.stack([ zero, torch.cos(angles[:,:,0]), -torch.sin(angles[:,:,0])], dim = 2))
+        R_x.append(torch.stack([ zero, torch.sin(angles[:,:,0]), torch.cos(angles[:,:,0])], dim = 2))
+        R_x = torch.stack(R_x, dim = 2).unsqueeze(2)
+
+        R_y.append(torch.stack([ torch.cos(angles[:,:,1]), zero, torch.sin(angles[:,:,1])], dim = 2))
+        R_y.append(torch.stack([ zero, one, zero], dim = 2))
+        R_y.append(torch.stack([ -torch.sin(angles[:,:,1]), zero, torch.cos(angles[:,:,1])], dim = 2))
+        R_y = torch.stack(R_y, dim = 2).unsqueeze(2)
+
+        R_z.append(torch.stack([ torch.cos(angles[:,:,2]), -torch.sin(angles[:,:,2]), zero], dim = 2))
+        R_z.append(torch.stack([ torch.sin(angles[:,:,2]), torch.cos(angles[:,:,2]), zero], dim = 2))
+        R_z.append(torch.stack([ zero, zero, one], dim = 2))
+        R_z = torch.stack(R_z, dim = 2).unsqueeze(2)
+        
         trans,_ = self.lstm_tran(x) 
         trans = trans.contiguous()
         trans = trans.view((-1, trans.size(-1)))
@@ -76,7 +85,9 @@ class SkeletonAction_VA(nn.Module):
         trans = trans.view((batch_size, seq_len, x.size(-1)))
         x = x - trans 
         x = x.view(batch_size, seq_len, x.size(-1) // 3, 1, 3)
-        x = (R_ * x).sum(dim = -1)
+        x = (R_x * x).sum(dim = -1, keepdim = True)
+        x = (R_y * x).sum(dim = -1, keepdim = True)
+        x = (R_z * x).sum(dim = -1)
         x = x.view(batch_size, seq_len, self.input_size)
         x,_ = self.lstm(x)
         x = x.contiguous()

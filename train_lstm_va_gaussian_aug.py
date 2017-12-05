@@ -144,7 +144,6 @@ def main(args):
 
                     prob = F.softmax(opt, dim = 2)
                     prob = (prob * mask.view(mask.size(0), mask.size(1), 1)).sum(dim = 1)
-                    prob = prob.sum(dim = 1)
                     pred_lbl = prob.max(dim = -1)[1].data.cpu()
                     correct_num2 += (pred_lbl.squeeze() == gt_lbl.squeeze()).sum()
 
