@@ -80,8 +80,8 @@ class SkeletonAction_VA(nn.Module):
         trans = trans.contiguous()
         trans = trans.view((-1, trans.size(-1)))
         trans = self.fc_t(trans)
-        trans = trans.view((batch_size, seq_len, trans.size(-1), 1))
-        trans = trans.repeat(1,1,1, x.size(-1) // 3)
+        trans = trans.view((batch_size, seq_len, 1, trans.size(-1)))
+        trans = trans.repeat(1,1,x.size(-1) // 3, 1)
         trans = trans.view((batch_size, seq_len, x.size(-1)))
         x = x - trans 
         x = x.view(batch_size, seq_len, x.size(-1) // 3, 1, 3)
