@@ -80,6 +80,7 @@ class NTUDataset(data.Dataset):
         self.root = root
         self.list_fns = self.__loaddata(self.root)
         self.num_points = 25
+        self.max_len = 100
         
     
     def __loaddata(self, root):
@@ -95,11 +96,14 @@ class NTUDataset(data.Dataset):
         lbl = os.path.splitext(os.path.basename(fn))[0]
         lbl = int(lbl[lbl.index('A')+1:])  - 1
         data = np.loadtxt(fn)
+        if data.shape[0] > self.max_len:
+           start_idx = np.random.randint(0, data.shape[0] - self.max_len)
+           data = data[start_idx:,:]
         data = np.reshape(data, (data.shape[0], self.num_points, data.shape[1]//self.num_points))
         noise = np.random.normal(loc = 0.0, scale = 0.075, size = (data.shape[0], data.shape[1], data.shape[2])).astype('float32')
-        data = data + noise
         mid_spine_id = 1
         data = data - data[0,mid_spine_id,:].reshape(1, 1, data.shape[2])
+        data = data + noise
         data = np.reshape(data, (data.shape[0], data.shape[1] * data.shape[2]))
         lbl = torch.Tensor([lbl]).long()
         length = torch.LongTensor(1)
