@@ -1,6 +1,6 @@
 import argparse
 import torch
-import cPickle as pickle
+import pickle
 import torch.nn as nn
 import numpy as np
 import os
@@ -24,7 +24,7 @@ def main(args):
     if not os.path.isdir(args.model_path):
         os.makedirs(args.model_path)
 
-    data_loader,ds_class = get_loader(args.data_dir, args.seq_len, args.batch_size,
+    data_loader,ds_class = get_loader(args.data_dir, args.batch_size,
                              shuffle=True, num_workers=args.num_workers, ds = args.ds) 
 
     # Build eval data loader
@@ -128,12 +128,11 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', type=str, default='./models_lstm/' ,
                         help='path for saving trained models')
     # Model parameters
-    parser.add_argument('--data_dir', type = str, default = './data/utkinect/joints_processed_shrink_rm_center/')
-    parser.add_argument('--data_dir_test', type = str, default = './data/utkinect/joints_processed_shrink_rm_center_test/')
+    parser.add_argument('--data_dir', type = str, default = './data/NTURGBD/skeletons_3d_train')
+    parser.add_argument('--data_dir_test', type = str, default = './data/NTURGBD/skeletons_3d_train_val')
     parser.add_argument('--input_size', type=int , default=45,
                         help='dimension of input skeleton size(default 3d)')
     parser.add_argument('--ds', type = str, default = 'UTKinect')
-    parser.add_argument('--seq_len', type=int , default=10, help = 'default length of the sequence for training.')
     parser.add_argument('--hidden_size', type=int , default=128,
                         help='dimension of lstm hidden states')
     parser.add_argument('--num_layers', type=int , default=2,

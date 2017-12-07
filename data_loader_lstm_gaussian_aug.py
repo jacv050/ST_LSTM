@@ -98,7 +98,7 @@ class NTUDataset(data.Dataset):
         data = np.loadtxt(fn)
         if data.shape[0] > self.max_len:
            start_idx = np.random.randint(0, data.shape[0] - self.max_len)
-           data = data[start_idx:,:]
+           data = data[start_idx:start_idx + self.max_len,:]
         data = np.reshape(data, (data.shape[0], self.num_points, data.shape[1]//self.num_points))
         noise = np.random.normal(loc = 0.0, scale = 0.075, size = (data.shape[0], data.shape[1], data.shape[2])).astype('float32')
         mid_spine_id = 1

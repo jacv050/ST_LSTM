@@ -179,6 +179,7 @@ class SkeletonAction_VA_AVG_H(nn.Module):
         x = (R_z * x).sum(dim = -1)
         x = x.view(batch_size, seq_len, self.input_size)
         x,_ = self.lstm(x)
+        pdb.set_trace()
         x = (x * mask).sum(dim = 1) / mask.sum(dim = 1)
         #x = torch.mean(x, dim = 1)
         x = self.linear(x)

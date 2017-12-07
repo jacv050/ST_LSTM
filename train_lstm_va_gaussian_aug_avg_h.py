@@ -88,7 +88,6 @@ def main(args):
                 model.eval()
                 total_num = 0
                 correct_num = 0
-                correct_num2 = 0
                 for k_step, (lbl, data, length) in enumerate(eval_data_loader):
                     lbl = Variable(lbl.squeeze())
                     data = Variable(data)
@@ -113,11 +112,12 @@ def main(args):
          
                 model.train()
 
-        if epoch % 10 == 0:
-            logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f'
+        accuracy = total_correct * 1.0 / total_train
+        logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f'
                           ,epoch, args.num_epochs, 
                             loss.data[0], accuracy)
                 # Save the models
+        if epoch % 10 == 0:
             torch.save(model.state_dict(), 
                 os.path.join(args.model_path, 
                         'model-%d.pkl' %(epoch+1)))
