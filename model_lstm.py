@@ -69,7 +69,7 @@ class SkeletonAction_AVG_H(nn.Module):
         seq_len = x.size(1)
         x,_ = self.lstm(x)
         x = x.contiguous()
-        x = x.view((-1, x.size(-1)))
+        #x = x.view((-1, x.size(-1)))
         #x = self.dropout_layer(x)
         x = (x * mask).sum(dim = 1) / mask.sum(dim = 1)
         x = self.linear(x)

@@ -62,7 +62,7 @@ def main(args):
         total_correct_2 = 0
         for i_step, (lbl, data, length) in enumerate(data_loader):
             # Set mini-batch dataset
-            lbl = Variable(lbl)
+            lbl = Variable(lbl.squeeze())
             data = Variable(data)
             mask = torch.zeros(data.size(0), data.size(1))
             for i,m in zip(length, mask):
@@ -89,7 +89,7 @@ def main(args):
                 correct_num = 0
                 correct_num2 = 0
                 for k_step, (lbl, data, length) in enumerate(eval_data_loader):
-                    lbl = Variable(lbl)
+                    lbl = Variable(lbl.squeeze())
                     data = Variable(data)
                     mask = torch.zeros(data.size(0), data.size(1))
                     for i,m in zip(length, mask):
@@ -114,11 +114,12 @@ def main(args):
          
                 model.train()
 
-        if epoch % 10 == 0:
-            logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f'
-                          ,epoch, args.num_epochs, 
-                            loss.data[0], accuracy)
+        accuracy = 1.0 * total_correct / total_train 
+        logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f'
+            ,epoch, args.num_epochs, 
+            loss.data[0], accuracy)
                 # Save the models
+        if epoch % 10 == 0:
             torch.save(model.state_dict(), 
                 os.path.join(args.model_path, 
                         'model-%d.pkl' %(epoch+1)))
