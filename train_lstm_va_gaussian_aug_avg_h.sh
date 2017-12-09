@@ -1,6 +1,6 @@
 
 
-CUDA_VISIBLE_DEVICES=0 python train_lstm_va_gaussian_aug_avg_h.py --model_path ./models_lstm_va_gaussian_aug_avg_h \
+CUDA_VISIBLE_DEVICES=0 python train_lstm_va_gaussian_aug_avg_h.py --model_path ./models_lstm_va_gaussian_aug_avg_h_clip_1 \
     --input_size 75 \
     --ds NTU \
     --hidden_size 100 \

@@ -8,16 +8,17 @@ import glob
 import pdb
 
 from data_loader_lstm_gaussian_aug import get_loader 
-from model_lstm_va import SkeletonAction_VA_AVG_H as SkeletonAction
+
+from model_lstm_rl import SkeletonAction, ValueNetwork, PolicyNetwork, CoreClassification
 from torch.autograd import Variable 
 import torch.nn.functional as F
 from torch.nn.utils.clip_grad import clip_grad_norm
+from torch.distributions import Categorical
 
 import climate
 import logging
 logging = climate.get_logger(__name__)
 climate.enable_default_logging()
-
 
 def main(args):
     # Build data loader
@@ -34,18 +35,28 @@ def main(args):
     else:
         eval_data_loader,_ = get_loader(args.data_dir_test, args.batch_size,
                              shuffle=True, num_workers=args.num_workers, ds = args.ds)
-    
-    model = SkeletonAction(args.input_size, args.hidden_size, args.num_class, args.num_layers, args.use_bias, args.dropout)
-
 
     # Loss and Optimizer
+    model_base = SkeletonAction(args.input_size, args.hidden_size, args.num_class, args.num_action, args.num_layers, dropout = args.dropout)
+    model_value = ValueNetwork( args.hidden_size )
+    model_policy = PolicyNetwork( args.hidden_size, args.num_action )
+    model_c = CoreClassification( args.hidden_size, args.num_class )
     criterion = nn.CrossEntropyLoss()
-    if torch.cuda.is_available():
-        model.cuda()
-        criterion = criterion.cuda()
+    criterion_value = nn.SmoothL1Loss()
 
-    params = model.parameters()
-    optimizer = torch.optim.Adam(params, lr=args.learning_rate)
+    if torch.cuda.is_available():
+        model_base.cuda()
+        model_value.cuda()
+        model_policy.cuda()
+        model_c.cuda()
+        criterion = criterion.cuda()
+        criterion_value = criterion_value.cuda()
+
+    params = list(model_base.parameters()) + list(model_c.parameters())
+    opt = torch.optim.Adam(params, lr=args.learning_rate)
+    opt_value = torch.optim.Adam(model_value.parameters(), lr = args.learning_rate)
+    opt_policy = torch.optim.Adam(model_policy.parameters(), lr = args.learning_rate)
+    opt_c = torch.optim.Adam(model_c.parameters(), lr = args.learning_rate)
 
     # Load the trained model parameters
     # Now, we try to find the latest encoder and decoder model.
@@ -57,6 +68,13 @@ def main(args):
 
     # Train the Models
     total_step = len(data_loader)
+    # Initialize some variables.
+    h = torch.zeros(args.batch_size, args.hidden_size)
+    if torch.cuda.is_available():
+        h = h.cuda()
+    init_h = Variable(h)
+    init_hs = [ init_h for i in range( args.num_layers ) ]
+    init_cs = init_h
     for epoch in range(args.num_epochs):
         total_train = 0
         total_correct = 0
@@ -74,6 +92,61 @@ def main(args):
                 lbl = lbl.cuda()
                 data = data.cuda()
                 mask = mask.cuda()
+
+            init_h.resize_(data.size(0), data.size(1)) 
+            zero = torch.zeros(data.size(0),).Long()
+            zero = Variable(zero)
+            if torch.cuda.is_available():
+                zero = zero.cuda()
+ 
+            hs = []
+            action_probs = []
+            actions = []
+            ht, ct = model_base( data[:,i,:], zero, init_hs, init_cs)
+            hs.append(ht)
+
+            action_prob = model_policy(hs[-1])
+            action_probs.append(action_prob)
+            action = Categorical(action_prob)
+            action = action.sample()
+            actions.append(action)
+            
+            for j_step in range(1, data.shape[1]):
+                ht, ct = model_base( data[:,i,:], action, ht, ct)
+                hs.append(ht)
+                action_prob = model_policy(hs[-1])
+                action = action.sample()
+            # now, we have finished all the actions.
+            # need to bp.
+            # the award only returns at the end of the episode.
+            hs = torch.stack(hs, dim = 1)
+            hs = (hs * mask).sum(dim = 1) / mask.sum(dim = 1)
+            logits = CoreClassification(hs) 
+            log_p = F.log_softmax(logits, dim = 1)
+            long_idx = torch.LongTensor(range(opt.size(0))).cuda()
+            mask = mask.view(mask.size(0) * mask.size(1))
+            loss = - (mask.squeeze() * log_p[long_idx, lbl.squeeze().data]).sum() / mask.sum()
+
+            pred_lbl = logits.max(dim = 1)[0]
+            reward = Variable((pred_lbl.data == lbl.data).Float())
+            discount = 1.0
+            loss_value = []
+            loss_policy = []
+            
+            # Now we update the value network
+            for j_step, (h, action, action_prob) in enumerate(zip(hs, actions, action_probs)):
+                # total reward.
+                target = reward * discount ** (data.size(0) - j_step)
+                exp_reward = model_value(h)
+                l_value = criterion_value(exp_reward, target)
+                loss_value.append( l_value )
+                advantage = target - exp_reward
+                c = Categorical(action_prob)
+                l_policy = -c.log_prob(action) * advantage
+                loss_policy.append( l_policy.mean() )
+            loss_value = torch.stack(loss_value).mean()
+            loss_policy = torch.stack(loss_policy).mean()
+
             model.zero_grad()
             mask = mask.unsqueeze(2)
             opt = model(data, mask)
@@ -140,6 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers', type=int , default=3,
                         help='number of layers in lstm')
     parser.add_argument('--num_class', type = int, default = 10, help = 'number of action classes')
+    parser.add_argument('--num_action', type = int, default = 16, help = 'number of action')
     parser.add_argument('--use_bias', action='store_true', help = 'use the bias or not in lstm.')
     parser.add_argument('--dropout', type = float, default = 0.5)
     parser.add_argument('--grad_clip', type = float, default = 1.0)
