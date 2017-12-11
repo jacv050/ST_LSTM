@@ -52,11 +52,12 @@ def main(args):
         criterion = criterion.cuda()
         criterion_value = criterion_value.cuda()
 
-    params = list(model_base.parameters()) + list(model_c.parameters())
+    params = list(model_base.parameters()) + list(model_c.parameters()) + list(model_value.parameters()) \
+             + list(model_policy.parameters())
     opt = torch.optim.Adam(params, lr=args.learning_rate)
-    opt_value = torch.optim.Adam(model_value.parameters(), lr = args.learning_rate)
-    opt_policy = torch.optim.Adam(model_policy.parameters(), lr = args.learning_rate)
-    opt_c = torch.optim.Adam(model_c.parameters(), lr = args.learning_rate)
+    #opt_value = torch.optim.Adam(model_value.parameters(), lr = args.learning_rate)
+    #opt_policy = torch.optim.Adam(model_policy.parameters(), lr = args.learning_rate)
+    #opt_c = torch.optim.Adam(model_c.parameters(), lr = args.learning_rate)
 
     # Load the trained model parameters
     # Now, we try to find the latest encoder and decoder model.
@@ -69,12 +70,9 @@ def main(args):
     # Train the Models
     total_step = len(data_loader)
     # Initialize some variables.
-    h = torch.zeros(args.batch_size, args.hidden_size)
+    h_tensor = torch.zeros(args.batch_size, args.hidden_size)
     if torch.cuda.is_available():
-        h = h.cuda()
-    init_h = Variable(h)
-    init_hs = [ init_h for i in range( args.num_layers ) ]
-    init_cs = init_h
+        h_tensor = h_tensor.cuda()
     for epoch in range(args.num_epochs):
         total_train = 0
         total_correct = 0
@@ -93,8 +91,12 @@ def main(args):
                 data = data.cuda()
                 mask = mask.cuda()
 
-            init_h.resize_(data.size(0), data.size(1)) 
-            zero = torch.zeros(data.size(0),).Long()
+            h_tensor.resize_(data.size(0), data.size(1)) 
+            init_h = Variable(h_tensor)
+            init_hs = [ init_h for i in range( args.num_layers ) ]
+            init_cs = init_hs
+
+            zero = torch.zeros(data.size(0),)
             zero = Variable(zero)
             if torch.cuda.is_available():
                 zero = zero.cuda()
@@ -102,66 +104,101 @@ def main(args):
             hs = []
             action_probs = []
             actions = []
-            ht, ct = model_base( data[:,i,:], zero, init_hs, init_cs)
-            hs.append(ht)
+            ht, ct = model_base( data[:,0,:], zero, init_hs, init_cs)
+            hs.append(ht[-1])
 
-            action_prob = model_policy(hs[-1])
+            action_prob = model_policy(ht[-1])
             action_probs.append(action_prob)
             action = Categorical(action_prob)
             action = action.sample()
             actions.append(action)
             
             for j_step in range(1, data.shape[1]):
-                ht, ct = model_base( data[:,i,:], action, ht, ct)
-                hs.append(ht)
-                action_prob = model_policy(hs[-1])
+                ht, ct = model_base( data[:,j_step,:], actions[j_step-1].float(), ht, ct)
+                hs.append(ht[-1])
+                action_prob = model_policy(ht[-1])
+                action = Categorical(action_prob)
                 action = action.sample()
+                actions.append(action)
+                action_probs.append(action_prob)
             # now, we have finished all the actions.
             # need to bp.
             # the award only returns at the end of the episode.
-            hs = torch.stack(hs, dim = 1)
-            hs = (hs * mask).sum(dim = 1) / mask.sum(dim = 1)
-            logits = CoreClassification(hs) 
-            log_p = F.log_softmax(logits, dim = 1)
-            long_idx = torch.LongTensor(range(opt.size(0))).cuda()
-            mask = mask.view(mask.size(0) * mask.size(1))
-            loss = - (mask.squeeze() * log_p[long_idx, lbl.squeeze().data]).sum() / mask.sum()
+            hs_t = torch.stack(hs, dim = 1)
+            hs_t = (hs_t * mask.unsqueeze(2) ).sum(dim = 1) / mask.sum(dim = 1).unsqueeze(1)
+            logits = model_c(hs_t) 
+            #log_p = F.log_softmax(logits, dim = 1)
+            loss_ent = criterion(logits, lbl)
+            #loss = - (mask.squeeze() * log_p[long_idx, lbl.squeeze().data]).sum() / mask.sum()
 
-            pred_lbl = logits.max(dim = 1)[0]
-            reward = Variable((pred_lbl.data == lbl.data).Float())
-            discount = 1.0
+            pred_lbl = logits.max(dim = 1)[1]
+            reward = Variable((pred_lbl.data == lbl.data).float())
+            reward = reward.view(data.size(0), 1)
+            reward = reward.repeat(1, data.size(1))
             loss_value = []
             loss_policy = []
+
+            actions = torch.stack(actions, dim = 1)
+            action_probs = torch.stack(action_probs, dim = 1)
+            hs = torch.stack(hs, dim = 1)
+            hs = hs.view(-1, hs.size(-1))
+            exp_reward = model_value(hs)
+            exp_reward = exp_reward.view(data.size(0), data.size(1))
+            loss_value =( exp_reward - reward ) ** 2
+            loss_value = (loss_value * mask).sum() / mask.sum()
+            advantage = reward - Variable(exp_reward.data)
+            idx = torch.LongTensor(range(data.size(0)))
+            idx = idx.view(data.size(0), 1)
+            idx = idx.repeat(1, data.size(1))
+            idx = idx.view(data.size(0) * data.size(1))
+            if torch.cuda.is_available():
+                idx = idx.cuda()
+            action_probs = action_probs.view(action_probs.size(0) * action_probs.size(1),action_probs.size(-1))
+            actions = actions.view(actions.size(0) * actions.size(1))
+            log_prob = action_probs[idx, actions]
+            log_prob = log_prob.view(mask.size(0), mask.size(1))
+            loss_policy = -torch.log(log_prob + 1e-7) * mask * advantage
+            loss_policy = loss_policy.sum() / mask.sum()
+            loss = loss_ent + loss_policy + loss_value
             
             # Now we update the value network
-            for j_step, (h, action, action_prob) in enumerate(zip(hs, actions, action_probs)):
-                # total reward.
-                target = reward * discount ** (data.size(0) - j_step)
-                exp_reward = model_value(h)
-                l_value = criterion_value(exp_reward, target)
-                loss_value.append( l_value )
-                advantage = target - exp_reward
-                c = Categorical(action_prob)
-                l_policy = -c.log_prob(action) * advantage
-                loss_policy.append( l_policy.mean() )
-            loss_value = torch.stack(loss_value).mean()
-            loss_policy = torch.stack(loss_policy).mean()
+            #for j_step, (h, action, action_prob) in enumerate(zip(hs, actions, action_probs)):
+            #    # total reward.
+            #    target = reward * discount ** (data.size(0) - j_step)
+            #    exp_reward = model_value(h)
+            #    logging.info('exp_reward: %.4f, target: %.4f', exp_reward.mean().data[0], target.mean().data[0])
+            #    l_value = criterion_value(exp_reward, target)
+            #    loss_value.append( l_value )
+            #    advantage = target - exp_reward
+            #    c = Categorical(action_prob)
+            #    l_policy = -c.log_prob(action) * advantage
+            #    loss_policy.append( l_policy.mean() )
+            #loss_value = torch.stack(loss_value).mean()
+            #loss_policy = torch.stack(loss_policy).mean()
+            #loss += loss_value + loss_policy
+           
 
-            model.zero_grad()
-            mask = mask.unsqueeze(2)
-            opt = model(data, mask)
-            # compute accuracy.        
-            pred_lbl = opt.max(dim = -1)[1].data.cpu()
-            total_train += data.size(0)
-            total_correct += (pred_lbl.squeeze() == lbl.data.cpu().squeeze()).sum()
-            loss = criterion(opt,lbl)
+            opt.zero_grad()
             loss.backward()
+            #old_norm = clip_grad_norm(params, args.grad_clip)
+            opt.step()
+            total_train += data.size(0)
+            total_correct += (pred_lbl.data.cpu().squeeze() == lbl.data.cpu().squeeze()).sum()
             # Use grad clip.
-            old_norm = clip_grad_norm(params, args.grad_clip)
-            optimizer.step()
             # Eval the trained model
+            logging.info('Epoch [%d/%d], Loss: %.4f, reward: %5.4f, loss_value: %5.4f, loss_policy: %5.4f', 
+                                    epoch, args.num_epochs, 
+                                    loss_ent.data[0], reward.mean().data[0], loss_value.data[0], loss_policy.data[0])
+            if i_step % args.log_step == 0:
+                accuracy = total_correct * 1.0 / total_train
+                logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f, reward: %5.4f'
+                                  ,epoch, args.num_epochs, 
+                                    loss_ent.data[0], accuracy, reward.mean().data[0])
+
             if i_step % args.eval_step == 0:
-                model.eval()
+                model_base.eval()
+                model_c.eval()
+                model_policy.eval()
                 total_num = 0
                 correct_num = 0
                 for k_step, (lbl, data, length) in enumerate(eval_data_loader):
@@ -176,27 +213,66 @@ def main(args):
                         mask = mask.cuda()
         
                     mask = Variable(mask)
-                    mask = mask.unsqueeze(2)
-                    opt = model(data, mask)
-                    pred_lbl = opt.max(dim = -1)[1].data.cpu()
+
+                    h_tensor.resize_(data.size(0), data.size(1)) 
+                    init_h = Variable(h_tensor)
+                    init_hs = [ init_h for i in range( args.num_layers ) ]
+                    init_cs = init_hs
+
+
+                    zero = torch.zeros(data.size(0),)
+                    zero = Variable(zero)
+                    if torch.cuda.is_available():
+                        zero = zero.cuda()
+ 
+                    hs = []
+                    action_probs = []
+                    actions = []
+                    ht, ct = model_base( data[:,0,:], zero, init_hs, init_cs)
+                    hs.append(ht[-1])
+
+                    action_prob = model_policy(ht[-1])
+                    action_probs.append(action_prob)
+                    action = Categorical(action_prob)
+                    action = action.sample()
+                    actions.append(action)
+                    
+                    for j_step in range(1, data.shape[1]):
+                        ht, ct = model_base( data[:,j_step,:], action.float(), ht, ct)
+                        hs.append(ht[-1])
+                        action_prob = model_policy(ht[-1])
+                        action = Categorical(action_prob)
+                        action = action.sample()
+                    # now, we have finished all the actions.
+                    # need to bp.
+                    # the award only returns at the end of the episode.
+                    hs_t = torch.stack(hs, dim = 1)
+                    hs_t = (hs_t * mask.unsqueeze(2) ).sum(dim = 1) / mask.sum(dim = 1).unsqueeze(1)
+                    logits = model_c(hs_t) 
+                    log_p = F.log_softmax(logits, dim = 1)
+
+                    pred_lbl = logits.max(dim = -1)[1].data.cpu()
                     total_num += data.size(0)
                     correct_num += (pred_lbl.squeeze() == lbl.data.cpu().squeeze()).sum()
-                    loss = criterion(opt, lbl)
+                    loss = criterion(logits, lbl)
                 accuracy = correct_num * 1.0 / total_num
                 logging.info('Validating [%d], Loss: %.4f, accuracy: %.4f' ,epoch,
                                 loss.data[0], accuracy)
          
-                model.train()
+                model_base.train()
+                model_c.train()
+                model_policy.eval()
+                
 
         accuracy = total_correct * 1.0 / total_train
-        logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f'
+        logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f, reward: %5.4f'
                           ,epoch, args.num_epochs, 
-                            loss.data[0], accuracy)
+                            loss_ent.data[0], accuracy, reward.mean().data[0])
                 # Save the models
-        if epoch % 10 == 0:
-            torch.save(model.state_dict(), 
-                os.path.join(args.model_path, 
-                        'model-%d.pkl' %(epoch+1)))
+        #if epoch % 10 == 0:
+        #    torch.save(model.state_dict(), 
+        #        os.path.join(args.model_path, 
+        #                'model-%d.pkl' %(epoch+1)))
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -15,22 +15,25 @@ import logging
 logging = climate.get_logger(__name__)
 climate.enable_default_logging()
 
-class ValueNetwork(nn.Moduel):
+class ValueNetwork(nn.Module):
     def __init__(self, hidden_size):
+        super(ValueNetwork, self).__init__()
         self.hidden_size = hidden_size
         self.model = nn.Sequential( nn.Linear(hidden_size, hidden_size), nn.ReLU(), nn.Linear(hidden_size, 1))
     def forward(self, state):
         return self.model(state)
 
-class PolicyNetwork(nn.Model):
+class PolicyNetwork(nn.Module):
     def __init__(self, hidden_size, num_actions):
+        super(PolicyNetwork, self).__init__()
         self.hidden_size = hidden_size
         self.model = nn.Sequential( nn.Linear(hidden_size, hidden_size), nn.ReLU(), nn.Linear(hidden_size, num_actions), nn.Softmax(dim = 1) )
     def forward(self, state):
         return self.model(state)
 
-class CoreClassification(nn.Model):
+class CoreClassification(nn.Module):
     def __init__(self, hidden_size, num_class):
+        super(CoreClassification, self).__init__()
         self.hidden_size = hidden_size
         self.model = nn.Sequential( nn.Linear(hidden_size, hidden_size), nn.ReLU(), nn.Linear(hidden_size, num_class) )
     def forward(self, state):
@@ -46,11 +49,12 @@ class SkeletonAction(nn.Module):
         self.num_actions = num_actions
         self.use_bias = use_bias
         self.dropout = dropout
-        self.rnn_cells = []
+        rnn_cells_lst = []
         ipt_size = input_size
         for i in range(num_layers):
-            self.rnn_cells.append(nn.LSTMCell(ipt_size, hidden_size))
+            rnn_cells_lst.append(nn.LSTMCell(ipt_size, hidden_size))
             ipt_size = hidden_size
+        self.rnn_cells = nn.ModuleList(rnn_cells_lst)
 
         self.linear = nn.Linear(hidden_size, num_class)
         self.dropout_layer = nn.Dropout(dropout)
@@ -69,25 +73,27 @@ class SkeletonAction(nn.Module):
         # Now, run the va lstm first.
 
         batch_size = x.size(0)
-        angles = action / self.num_actions * np.pi
+        
+        angles = action / self.num_actions * np.pi * 2
     
         # compute the rotation matrix.
-        zero = torch.zeros(batch_size, seq_len)
-        one = torch.ones(batch_size, seq_len)
+        zero = torch.zeros(batch_size)
+        one = torch.ones(batch_size)
         if torch.cuda.is_available():
             zero = zero.cuda()
             one = one.cuda()
         zero = Variable(zero) 
         one = Variable(one)
 
+        R_z = []
         R_z.append(torch.stack([ torch.cos(angles), -torch.sin(angles), zero], dim = 1))
         R_z.append(torch.stack([ torch.sin(angles), torch.cos(angles), zero], dim = 1))
         R_z.append(torch.stack([ zero, zero, one], dim = 1))
         R_z = torch.stack(R_z, dim = 1).unsqueeze(1)
-
+        x = x.contiguous()
         x = x.view(batch_size, x.size(-1) // 3, 1, 3)
         x = (R_z * x).sum(dim = -1)
-        x = x.view(batch_size, seq_len, self.input_size)
+        x = x.view(batch_size, self.input_size)
         ht,ct = [],[]
         for idx, cell in enumerate(self.rnn_cells):
            hx, cx = cell(x, (h_t_1[idx], c_t_1[idx]))
