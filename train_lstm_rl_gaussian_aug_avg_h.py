@@ -117,7 +117,8 @@ def main(args):
                 ht, ct = model_base( data[:,j_step,:], actions[j_step-1].float(), ht, ct)
                 hs.append(ht[-1])
                 action_prob = model_policy(ht[-1])
-                action = Categorical(action_prob)
+                # We need to smooth the probability
+                action = Categorical((action_prob + action_probs[j_step-1]) / 2)
                 action = action.sample()
                 actions.append(action)
                 action_probs.append(action_prob)
@@ -180,20 +181,23 @@ def main(args):
 
             opt.zero_grad()
             loss.backward()
-            #old_norm = clip_grad_norm(params, args.grad_clip)
+            old_norm = clip_grad_norm(params, args.grad_clip)
             opt.step()
             total_train += data.size(0)
             total_correct += (pred_lbl.data.cpu().squeeze() == lbl.data.cpu().squeeze()).sum()
             # Use grad clip.
             # Eval the trained model
-            logging.info('Epoch [%d/%d], Loss: %.4f, reward: %5.4f, loss_value: %5.4f, loss_policy: %5.4f', 
-                                    epoch, args.num_epochs, 
-                                    loss_ent.data[0], reward.mean().data[0], loss_value.data[0], loss_policy.data[0])
+            #logging.info('Epoch [%d/%d], Loss: %.4f, reward: %5.4f, loss_value: %5.4f, loss_policy: %5.4f', 
+            #                        epoch, args.num_epochs, 
+            #                        loss_ent.data[0], reward.mean().data[0], loss_value.data[0], loss_policy.data[0])
             if i_step % args.log_step == 0:
                 accuracy = total_correct * 1.0 / total_train
-                logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f, reward: %5.4f'
-                                  ,epoch, args.num_epochs, 
-                                    loss_ent.data[0], accuracy, reward.mean().data[0])
+                logging.info('Epoch [%d/%d], Loss: %.4f, reward: %5.4f, loss_value: %5.4f, loss_policy: %5.4f, accuracy: %5.4f', 
+                                    epoch, args.num_epochs, 
+                                    loss_ent.data[0], reward.mean().data[0], loss_value.data[0], loss_policy.data[0], accuracy)
+                #logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f, reward: %5.4f'
+                #                  ,epoch, args.num_epochs, 
+                #                    loss_ent.data[0], accuracy, reward.mean().data[0])
 
             if i_step % args.eval_step == 0:
                 model_base.eval()
@@ -243,6 +247,7 @@ def main(args):
                         action_prob = model_policy(ht[-1])
                         action = Categorical(action_prob)
                         action = action.sample()
+                        actions.append(action)
                     # now, we have finished all the actions.
                     # need to bp.
                     # the award only returns at the end of the episode.
