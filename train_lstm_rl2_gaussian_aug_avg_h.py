@@ -42,7 +42,7 @@ def main(args):
     model_policy = PolicyNetwork( args.hidden_size, args.num_action )
     model_c = CoreClassification( args.hidden_size, args.num_class )
     criterion = nn.CrossEntropyLoss()
-    criterion_value = nn.SmoothL1Loss()
+    criterion_value = nn.SmoothL1Loss(reduce = False)
 
     if torch.cuda.is_available():
         model_base.cuda()
@@ -118,7 +118,8 @@ def main(args):
                 hs.append(ht[-1])
                 action_prob = model_policy(ht[-1])
                 # We need to smooth the probability
-                action = Categorical((action_prob + action_probs[j_step-1]) / 2)
+                #action = Categorical((action_prob + action_probs[j_step-1]) / 2)
+                action = Categorical(action_prob)
                 action = action.sample()
                 actions.append(action)
                 action_probs.append(action_prob)
@@ -139,33 +140,33 @@ def main(args):
             # Now we update the value network
             discount = 0.99
             rewards = []
-            model_c.eval()
             for h in hs:
                 logits = model_c(h)
                 pred_lbl = logits.max(dim = 1)[1]
                 reward = Variable((pred_lbl.data == lbl.data).float())
                 rewards.append(reward)
-
             for j_step, (h, action, action_prob) in enumerate(zip(hs, actions, action_probs)):
                 # total reward.
-                target = sum(discount ** i * reward for i,t in enumerate(rewards[j_step:]))
-                exp_reward = model_value(h)
+                #target = sum(discount ** i * reward for i,t in enumerate(rewards[j_step:]))
+                target = rewards[j_step]
+                exp_reward = model_value(h).squeeze()
                 #logging.info('exp_reward: %.4f, target: %.4f', exp_reward.mean().data[0], target.mean().data[0])
                 l_value = criterion_value(exp_reward, target)
                 loss_value.append( l_value )
                 advantage = target - Variable(exp_reward.data)
                 c = Categorical(action_prob)
                 l_policy = -c.log_prob(action) * advantage
-                loss_policy.append( l_policy.mean() )
+                loss_policy.append( l_policy )
             loss_value = torch.stack(loss_value, dim = 1)
             loss_policy = torch.stack(loss_policy, dim = 1)
             loss_value = (loss_value * mask).sum() / mask.sum()
             loss_policy = (loss_policy * mask).sum() / mask.sum()
             loss = loss_ent + loss_value + loss_policy
+            #loss = loss_policy
            
             opt.zero_grad()
             loss.backward()
-            #old_norm = clip_grad_norm(params, args.grad_clip)
+            old_norm = clip_grad_norm(params, args.grad_clip)
             opt.step()
             total_train += data.size(0)
             total_correct += (pred_lbl_avg.data.cpu().squeeze() == lbl.data.cpu().squeeze()).sum()

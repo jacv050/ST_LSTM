@@ -54,6 +54,7 @@ def main(args):
 
     params = list(model_base.parameters()) + list(model_c.parameters()) + list(model_value.parameters()) \
              + list(model_policy.parameters())
+    #opt = torch.optim.Adam(params, lr=args.learning_rate, weight_decay = args.weight_decay)
     opt = torch.optim.Adam(params, lr=args.learning_rate)
     #opt_value = torch.optim.Adam(model_value.parameters(), lr = args.learning_rate)
     #opt_policy = torch.optim.Adam(model_policy.parameters(), lr = args.learning_rate)
@@ -294,10 +295,11 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers', type=int , default=3,
                         help='number of layers in lstm')
     parser.add_argument('--num_class', type = int, default = 10, help = 'number of action classes')
-    parser.add_argument('--num_action', type = int, default = 16, help = 'number of action')
+    parser.add_argument('--num_action', type = int, default = 8, help = 'number of action')
     parser.add_argument('--use_bias', action='store_true', help = 'use the bias or not in lstm.')
     parser.add_argument('--dropout', type = float, default = 0.5)
     parser.add_argument('--grad_clip', type = float, default = 1.0)
+    #parser.add_argument('--weight_decay', type = float, default = 1e-4)
     parser.add_argument('--log_step', type = int, default = 1)
     parser.add_argument('--eval_step', type = int, default = 1)
     parser.add_argument('--save_step', type = int, default = 100)
