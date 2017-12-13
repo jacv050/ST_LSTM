@@ -84,7 +84,7 @@ def main(args):
             loss = criterion(opt,lbl)
             loss.backward()
             # Use grad clip.
-            old_norm = clip_grad_norm(params, args.grad_clip)
+            #old_norm = clip_grad_norm(params, args.grad_clip)
             optimizer.step()
             # Eval the trained model
             if i_step % args.eval_step == 0:

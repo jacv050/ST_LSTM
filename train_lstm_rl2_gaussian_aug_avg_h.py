@@ -175,11 +175,13 @@ def main(args):
             #logging.info('Epoch [%d/%d], Loss: %.4f, reward: %5.4f, loss_value: %5.4f, loss_policy: %5.4f', 
             #                        epoch, args.num_epochs, 
             #                        loss_ent.data[0], reward.mean().data[0], loss_value.data[0], loss_policy.data[0])
+            rewards = torch.stack(rewards, dim = 1)
+            reward_mean = (rewards * mask).sum() / mask.sum()
             if i_step % args.log_step == 0:
                 accuracy = total_correct * 1.0 / total_train
                 logging.info('Epoch [%d/%d], Loss: %.4f, reward: %5.4f, loss_value: %5.4f, loss_policy: %5.4f, accuracy: %5.4f', 
                                     epoch, args.num_epochs, 
-                                    loss_ent.data[0], reward.mean().data[0], loss_value.data[0], loss_policy.data[0], accuracy)
+                                    loss_ent.data[0], reward_mean, loss_value.data[0], loss_policy.data[0], accuracy)
                 #logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f, reward: %5.4f'
                 #                  ,epoch, args.num_epochs, 
                 #                    loss_ent.data[0], accuracy, reward.mean().data[0])
@@ -257,7 +259,7 @@ def main(args):
         accuracy = total_correct * 1.0 / total_train
         logging.info('Epoch [%d/%d], Loss: %.4f, accuracy: %5.4f, reward: %5.4f'
                           ,epoch, args.num_epochs, 
-                            loss_ent.data[0], accuracy, reward.mean().data[0])
+                            loss_ent.data[0], accuracy, reward_mean.data[0])
                 # Save the models
         #if epoch % 10 == 0:
         #    torch.save(model.state_dict(), 

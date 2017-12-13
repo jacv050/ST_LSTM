@@ -148,6 +148,7 @@ def main(args):
             exp_reward = exp_reward.view(data.size(0), data.size(1))
             loss_value =( exp_reward - reward ) ** 2
             loss_value = (loss_value * mask).sum() / mask.sum()
+            pdb.set_trace()
             advantage = reward - Variable(exp_reward.data)
             idx = torch.LongTensor(range(data.size(0)))
             idx = idx.view(data.size(0), 1)
@@ -159,7 +160,9 @@ def main(args):
             actions = actions.view(actions.size(0) * actions.size(1))
             log_prob = action_probs[idx, actions]
             log_prob = log_prob.view(mask.size(0), mask.size(1))
+            pdb.set_trace()
             loss_policy = -torch.log(log_prob + 1e-7) * mask * advantage
+            pdb.set_trace()
             loss_policy = loss_policy.sum() / mask.sum()
             loss = loss_ent + loss_policy + loss_value
             
