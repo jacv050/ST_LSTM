@@ -12,6 +12,7 @@ from data_loader_lstm_gaussian_aug import get_loader
 from model_lstm import SkeletonAction_AVG_H as SkeletonAction
 from torch.autograd import Variable 
 import torch.nn.functional as F
+from torch.nn.utils.clip_grad import clip_grad_norm
 
 import climate
 import logging
@@ -81,6 +82,7 @@ def main(args):
             total_correct += (pred_lbl.squeeze() == lbl.data.cpu().squeeze()).sum()
             loss = criterion(opt, lbl)
             loss.backward()
+            old_norm = clip_grad_norm(params, args.grad_clip)
             optimizer.step()
             # Eval the trained model
             if i_step % args.eval_step == 0:
@@ -98,7 +100,6 @@ def main(args):
                         lbl = lbl.cuda()
                         data = data.cuda()
                         mask = mask.cuda()
-        
                     mask = Variable(mask)
                     mask = mask.unsqueeze(2)
                     model.zero_grad()
@@ -146,6 +147,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_step', type = int, default = 100)
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=56)
+    parser.add_argument('--grad_clip', type = float, default = 10.0)
     parser.add_argument('--num_workers', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=0.001)
     args = parser.parse_args()

@@ -95,14 +95,29 @@ class NTUDataset(data.Dataset):
         fn = self.list_fns[index]
         lbl = os.path.splitext(os.path.basename(fn))[0]
         lbl = int(lbl[lbl.index('A')+1:])  - 1
-        data = np.loadtxt(fn)
+        try:
+            data = np.loadtxt(fn)
+            if np.isnan(data).any():
+                print('Loading ', fn)
+                sys.exit()
+        except:
+            print(fn)
+            sys.exit()
         if data.shape[0] > self.max_len:
            start_idx = np.random.randint(0, data.shape[0] - self.max_len)
            data = data[start_idx:start_idx + self.max_len,:]
-        data = np.reshape(data, (data.shape[0], self.num_points, data.shape[1]//self.num_points))
+        try:
+            data = np.reshape(data, (data.shape[0], self.num_points, data.shape[1]//self.num_points))
+        except:
+            print(data.shape)
+            sys.exit()
         noise = np.random.normal(loc = 0.0, scale = 0.075, size = (data.shape[0], data.shape[1], data.shape[2])).astype('float32')
         mid_spine_id = 1
+        if data.shape[2] == 2:
+            # 2d.
+            data = data / 1080    
         data = data - data[0,mid_spine_id,:].reshape(1, 1, data.shape[2])
+        
         data = data + noise
         data = np.reshape(data, (data.shape[0], data.shape[1] * data.shape[2]))
         lbl = torch.Tensor([lbl]).long()
